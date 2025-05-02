@@ -34,7 +34,9 @@ def main():
             if not success:
                 print("Ignoring empty camera frame.")
                 break  # Ganti continue dengan break jika frame kosong
-                
+            
+            image = cv2.flip(image, 1)  # agar tidak mirror
+
             # Convert the BGR image to RGB
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             
@@ -50,17 +52,16 @@ def main():
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
             prev_time = current_time
             
-            # Face detection is still performed but landmarks are not drawn
-            # if results.detections:
-            #     for detection in results.detections:
-            #         mp_drawing.draw_detection(image, detection)
+            # Draw detection results
+            if results.detections:
+                for detection in results.detections:
+                    mp_drawing.draw_detection(image, detection)
                     
             # Show webcam feed
             cv2.imshow('MediaPipe Face Detection', image)
             
-            # Exit on ESC key press or when window is closed
-            key = cv2.waitKey(5)
-            if key == 27 or cv2.getWindowProperty('MediaPipe Face Detection', cv2.WND_PROP_VISIBLE) < 1:
+            # Exit on 'q' key press
+            if cv2.waitKey(5) & 0xFF == ord('q'):
                 break
                 
     # Release resources
