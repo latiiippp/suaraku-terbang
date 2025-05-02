@@ -19,7 +19,7 @@ def main():
         print("Error: Could not open webcam.")
         return
     
-    # Get actual resolution (may differ from requested if camera doesn't support it)
+    # Get actual resolution
     actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     print(f"Camera resolution: {actual_width}x{actual_height}")
@@ -33,7 +33,7 @@ def main():
             success, image = cap.read()
             if not success:
                 print("Ignoring empty camera frame.")
-                continue
+                break  # Ganti continue dengan break jika frame kosong
                 
             # Convert the BGR image to RGB
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -44,7 +44,7 @@ def main():
             # Display FPS
             current_time = time.time()
             time_diff = current_time - prev_time
-            if time_diff > 0:  # Avoid division by zero
+            if time_diff > 0:
                 fps = 1 / time_diff
                 cv2.putText(image, f"FPS: {int(fps)}", (10, 30), 
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
@@ -58,8 +58,9 @@ def main():
             # Show webcam feed
             cv2.imshow('MediaPipe Face Detection', image)
             
-            # Exit on ESC key press
-            if cv2.waitKey(5) & 0xFF == 27:
+            # Exit on ESC key press or when window is closed
+            key = cv2.waitKey(5)
+            if key == 27 or cv2.getWindowProperty('MediaPipe Face Detection', cv2.WND_PROP_VISIBLE) < 1:
                 break
                 
     # Release resources
