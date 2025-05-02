@@ -60,8 +60,9 @@ def main():
             # Show webcam feed
             cv2.imshow('MediaPipe Face Detection', image)
             
-            # Exit on 'q' key press
-            if cv2.waitKey(5) & 0xFF == ord('q'):
+            # Exit on ESC key press or when window is closed
+            key = cv2.waitKey(5)
+            if key == 27 or cv2.getWindowProperty('MediaPipe Face Detection', cv2.WND_PROP_VISIBLE) < 1:
                 break
                 
     # Release resources
