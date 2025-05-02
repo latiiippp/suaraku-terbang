@@ -34,6 +34,8 @@ def main():
             if not success:
                 print("Ignoring empty camera frame.")
                 continue
+            
+            image = cv2.flip(image, 1)  # agar tidak mirror
 
             # Convert the BGR image to RGB
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
