@@ -18,8 +18,11 @@ coming soon
 ## Logbook Mingguan
 
 - _1 Mei 2025_
-  1. Membuat repositori _Suaraku Terbang_
+  - Membuat repositori _Suaraku Terbang_
 - _2 Mei 2025_
-  1. Mendeteksi kamera dari webcam laptop.
-  2. Mengatasi mirror webcam.
-  3. Refactoring _error handling webcam_ dan _exit condition_.
+  - Mendeteksi kamera dari webcam laptop.
+  - Mengatasi mirror webcam.
+  - Refactoring _error handling webcam_ dan _exit condition_.
+- _10 Mei 2025_
+  - Update README.md
+  - Membuat penghalang atas dan bawah.
