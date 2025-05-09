@@ -8,7 +8,7 @@ mp_drawing = mp.solutions.drawing_utils
 
 def main():
     # Initialize webcam
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     
     # Set resolution to 1920x1080
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
@@ -56,6 +56,25 @@ def main():
             if results.detections:
                 for detection in results.detections:
                     mp_drawing.draw_detection(image, detection)
+            
+            # Draw horizontal barriers
+            # Calculate barrier positions - slightly toward center from top and bottom
+            top_barrier_y = int(actual_height * 0.35)  # 35% from the top
+            bottom_barrier_y = int(actual_height * 0.65)  # 65% from the top (25% from bottom)
+            
+            # Draw the barriers
+            barrier_color = (67, 67, 84) # Brown (RGB: 84, 67, 67)
+            barrier_thickness = 3
+            
+            # Top barrier
+            cv2.line(image, (0, top_barrier_y), (actual_width, top_barrier_y), 
+                     barrier_color, barrier_thickness)
+            
+            
+            # Bottom barrier
+            cv2.line(image, (0, bottom_barrier_y), (actual_width, bottom_barrier_y), 
+                     barrier_color, barrier_thickness)
+            
                     
             # Show webcam feed
             cv2.imshow('MediaPipe Face Detection', image)
