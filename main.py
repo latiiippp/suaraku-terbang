@@ -2,13 +2,15 @@ import cv2
 import mediapipe as mp
 import time
 
+kacamata = cv2.imread('kacamata.png', cv2.IMREAD_UNCHANGED)
+
 # MediaPipe Face Detection
 mp_face_detection = mp.solutions.face_detection
 mp_drawing = mp.solutions.drawing_utils
 
 def main():
-    # Initialize webcam
-    cap = cv2.VideoCapture(1)
+    # Initialize webcam (latip 1)
+    # cap = cv2.VideoCapture(1)
     
     # Set resolution to 1920x1080
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
@@ -56,6 +58,41 @@ def main():
             if results.detections:
                 for detection in results.detections:
                     mp_drawing.draw_detection(image, detection)
+                    
+                    # Get eye coordinates
+                    keypoints = detection.location_data.relative_keypoints
+                    left_eye = keypoints[0]
+                    right_eye = keypoints[1]
+
+                    # Convert to pixel coordinates
+                    left_eye_x = int(left_eye.x * actual_width)
+                    left_eye_y = int(left_eye.y * actual_height)
+                    right_eye_x = int(right_eye.x * actual_width)
+                    right_eye_y = int(right_eye.y * actual_height)
+
+                    # Calculate center point and width between eyes
+                    eye_center_x = (left_eye_x + right_eye_x) // 2
+                    eye_center_y = (left_eye_y + right_eye_y) // 2
+                    eye_width = int(2.5 * abs(right_eye_x - left_eye_x))  # Make it slightly wider
+
+                    # Resize glasses image
+                    scale_factor = eye_width / kacamata.shape[1]
+                    new_glasses = cv2.resize(kacamata, (0, 0), fx=scale_factor, fy=scale_factor)
+
+                    gh, gw = new_glasses.shape[:2]
+                    top_left_x = eye_center_x - gw // 2
+                    top_left_y = eye_center_y - gh // 2
+
+                    # Overlay glasses
+                    for i in range(gh):
+                        for j in range(gw):
+                            if top_left_y + i >= image.shape[0] or top_left_x + j >= image.shape[1]:
+                                continue
+                            alpha = new_glasses[i, j, 3] / 255.0
+                            if alpha > 0:
+                                for c in range(3):
+                                    image[top_left_y + i, top_left_x + j, c] = \
+                                        int(alpha * new_glasses[i, j, c] + (1 - alpha) * image[top_left_y + i, top_left_x + j, c])
             
             # Draw horizontal barriers
             # Calculate barrier positions - slightly toward center from top and bottom
