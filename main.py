@@ -1,12 +1,36 @@
 import cv2
 import mediapipe as mp
 import time
+import numpy as np
 
 kacamata = cv2.imread('kacamata.png', cv2.IMREAD_UNCHANGED)
 
 # MediaPipe Face Detection
 mp_face_detection = mp.solutions.face_detection
 mp_drawing = mp.solutions.drawing_utils
+
+def overlay_transparent(background, overlay, x, y):
+    bh, bw = background.shape[:2]
+    h, w = overlay.shape[:2]
+
+    if x + w > bw: w = bw - x
+    if y + h > bh: h = bh - y
+    if x < 0: overlay = overlay[:, -x:]; w += x; x = 0
+    if y < 0: overlay = overlay[-y:, :]; h += y; y = 0
+
+    if w <= 0 or h <= 0:
+        return background
+
+    overlay_crop = overlay[:h, :w]
+    bg_crop = background[y:y+h, x:x+w]
+
+    alpha = overlay_crop[:, :, 3:] / 255.0
+    color = overlay_crop[:, :, :3]
+
+    blended = alpha * color + (1 - alpha) * bg_crop
+    background[y:y+h, x:x+w] = blended.astype(np.uint8)
+
+    return background
 
 def main():
     # Initialize webcam (latip 1)
@@ -87,15 +111,7 @@ def main():
                     top_left_y = eye_center_y - gh // 2
 
                     # Overlay glasses
-                    for i in range(gh):
-                        for j in range(gw):
-                            if top_left_y + i >= image.shape[0] or top_left_x + j >= image.shape[1]:
-                                continue
-                            alpha = new_glasses[i, j, 3] / 255.0
-                            if alpha > 0:
-                                for c in range(3):
-                                    image[top_left_y + i, top_left_x + j, c] = \
-                                        int(alpha * new_glasses[i, j, c] + (1 - alpha) * image[top_left_y + i, top_left_x + j, c])
+                    image = overlay_transparent(image, new_glasses, top_left_x, top_left_y)
             
             # Draw horizontal barriers
             # Calculate barrier positions - slightly toward center from top and bottom
