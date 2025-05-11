@@ -12,6 +12,9 @@ def main():
     # Initialize webcam (latip 1)
     # cap = cv2.VideoCapture(1)
     
+    # Initialize webcam (Eden 0)
+    cap = cv2.VideoCapture(0)
+    
     # Set resolution to 1920x1080
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
