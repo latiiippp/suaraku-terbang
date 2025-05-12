@@ -3,7 +3,15 @@ import mediapipe as mp
 import time
 import numpy as np
 
-kacamata = cv2.imread('kacamata.png', cv2.IMREAD_UNCHANGED)
+kacamata = cv2.imread('assets/kacamata.png', cv2.IMREAD_UNCHANGED)
+ball = cv2.imread('assets/ball.png', cv2.IMREAD_UNCHANGED)
+
+# If the ball doesn't have an alpha channel, create one
+if ball.shape[2] == 3:
+    ball_with_alpha = np.zeros((ball.shape[0], ball.shape[1], 4), dtype=np.uint8)
+    ball_with_alpha[:,:,:3] = ball
+    ball_with_alpha[:,:,3] = 255  # Make it fully opaque
+    ball = ball_with_alpha
 
 # MediaPipe Face Detection
 mp_face_detection = mp.solutions.face_detection
@@ -55,6 +63,12 @@ def main():
     
     # Initialize time for FPS calculation
     prev_time = time.time()
+    
+    # Resize ball to desired size (adjust as needed)
+    ball_width = 100  # For example, 100 pixels wide
+    ball_aspect_ratio = ball.shape[0] / ball.shape[1]
+    ball_height = int(ball_width * ball_aspect_ratio)
+    resized_ball = cv2.resize(ball, (ball_width, ball_height))
     
     # Initialize MediaPipe Face Detection
     with mp_face_detection.FaceDetection(min_detection_confidence=0.5) as face_detection:
@@ -112,6 +126,11 @@ def main():
 
                     # Overlay glasses
                     image = overlay_transparent(image, new_glasses, top_left_x, top_left_y)
+            
+            # Place the ball in the center of the frame
+            center_x = actual_width // 2 - resized_ball.shape[1] // 2
+            center_y = actual_height // 2 - resized_ball.shape[0] // 2
+            image = overlay_transparent(image, resized_ball, center_x, center_y)
             
             # Draw horizontal barriers
             # Calculate barrier positions - slightly toward center from top and bottom
