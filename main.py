@@ -3,6 +3,7 @@ import mediapipe as mp
 import time
 import numpy as np
 import sounddevice as sd
+import threading
 
 kacamata = cv2.imread('assets/kacamata.png', cv2.IMREAD_UNCHANGED)
 ball = cv2.imread('assets/ball.png', cv2.IMREAD_UNCHANGED)
@@ -41,6 +42,8 @@ def overlay_transparent(background, overlay, x, y):
 
     return background
 
+sound_direction = "neutral"
+
 def detect_sound_direction(duration=0.1, sample_rate=44100):
     # Ambil data audio selama durasi tertentu
     recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='float32')
@@ -67,17 +70,18 @@ def detect_sound_direction(duration=0.1, sample_rate=44100):
         return "up"
     else:
         return "neutral"
+    
+def sound_thread():
+    global sound_direction
+    while True:
+        sound_direction = detect_sound_direction()
 
 def main():
-    # Initialize webcam (latip 1)
-    # cap = cv2.VideoCapture(1)
-    
-    # Initialize webcam (Eden 0)
     cap = cv2.VideoCapture(0)
     
     # Set resolution to 1920x1080
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     
     # Check if webcam opened successfully and resolution was set
     if not cap.isOpened():
@@ -100,6 +104,10 @@ def main():
     
     center_x = actual_width // 2 - resized_ball.shape[1] // 2
     center_y = actual_height // 2 - resized_ball.shape[0] // 2
+
+    threading.Thread(target = sound_thread, daemon = True).start()
+
+    frame_count = 0
     
     # Initialize MediaPipe Face Detection
     with mp_face_detection.FaceDetection(min_detection_confidence=0.5) as face_detection:
@@ -118,7 +126,10 @@ def main():
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             
             # Process the image and detect faces
-            results = face_detection.process(image_rgb)
+            results = None
+            if frame_count %5 == 0:
+                results = face_detection.process(image_rgb)
+            frame_count += 1
             
             # Display FPS
             current_time = time.time()
@@ -130,7 +141,7 @@ def main():
             prev_time = current_time
             
             # Draw detection results
-            if results.detections:
+            if results and results.detections:
                 for detection in results.detections:
                     mp_drawing.draw_detection(image, detection)
                     
@@ -161,6 +172,7 @@ def main():
                     # Overlay glasses
                     image = overlay_transparent(image, new_glasses, top_left_x, top_left_y)
             
+            direction = sound_direction
             # Gerakkan bola naik atau turun
             if direction == "down":
                 center_y += 10  # Turun
