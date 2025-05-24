@@ -2,6 +2,7 @@ import cv2
 import mediapipe as mp
 import time
 import numpy as np
+import sounddevice as sd
 
 kacamata = cv2.imread('assets/kacamata.png', cv2.IMREAD_UNCHANGED)
 ball = cv2.imread('assets/ball.png', cv2.IMREAD_UNCHANGED)
@@ -40,6 +41,33 @@ def overlay_transparent(background, overlay, x, y):
 
     return background
 
+def detect_sound_direction(duration=0.1, sample_rate=44100):
+    # Ambil data audio selama durasi tertentu
+    recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='float32')
+    sd.wait()
+    audio_data = recording.flatten()
+
+    # FFT untuk mendapatkan spektrum frekuensi
+    fft = np.fft.fft(audio_data)
+    freqs = np.fft.fftfreq(len(fft), 1/sample_rate)
+    magnitudes = np.abs(fft)
+
+    # Ambil hanya bagian positif dari frekuensi (tanpa duplikasi)
+    positive_freqs = freqs[:len(freqs)//2]
+    positive_magnitudes = magnitudes[:len(magnitudes)//2]
+
+    # Hitung energi di frekuensi rendah (<400Hz) dan tinggi (>2000Hz)
+    low_freq_energy = np.sum(positive_magnitudes[(positive_freqs >= 20) & (positive_freqs <= 400)])
+    high_freq_energy = np.sum(positive_magnitudes[(positive_freqs >= 2000) & (positive_freqs <= 5000)])
+
+    # Tentukan arah gerakan berdasarkan dominan frekuensi
+    if low_freq_energy > high_freq_energy:
+        return "down"
+    elif high_freq_energy > low_freq_energy:
+        return "up"
+    else:
+        return "neutral"
+
 def main():
     # Initialize webcam (latip 1)
     # cap = cv2.VideoCapture(1)
@@ -65,14 +93,20 @@ def main():
     prev_time = time.time()
     
     # Resize ball to desired size (adjust as needed)
-    ball_width = 100  # For example, 100 pixels wide
+    ball_width = 50  # For example, 100 pixels wide
     ball_aspect_ratio = ball.shape[0] / ball.shape[1]
     ball_height = int(ball_width * ball_aspect_ratio)
     resized_ball = cv2.resize(ball, (ball_width, ball_height))
     
+    center_x = actual_width // 2 - resized_ball.shape[1] // 2
+    center_y = actual_height // 2 - resized_ball.shape[0] // 2
+    
     # Initialize MediaPipe Face Detection
     with mp_face_detection.FaceDetection(min_detection_confidence=0.5) as face_detection:
         while cap.isOpened():
+            # Deteksi suara
+            direction = detect_sound_direction()
+
             success, image = cap.read()
             if not success:
                 print("Ignoring empty camera frame.")
@@ -127,9 +161,16 @@ def main():
                     # Overlay glasses
                     image = overlay_transparent(image, new_glasses, top_left_x, top_left_y)
             
-            # Place the ball in the center of the frame
-            center_x = actual_width // 2 - resized_ball.shape[1] // 2
-            center_y = actual_height // 2 - resized_ball.shape[0] // 2
+            # Gerakkan bola naik atau turun
+            if direction == "down":
+                center_y += 10  # Turun
+            elif direction == "up":
+                center_y -= 10  # Naik                
+            
+            # Ensure the ball stays within the frame
+            center_y = max(0, min(center_y, actual_height - resized_ball.shape[0]))
+            
+            # Overlay the ball at the center position
             image = overlay_transparent(image, resized_ball, center_x, center_y)
             
             # Draw horizontal barriers
