@@ -12,7 +12,7 @@ ball = cv2.imread('assets/ball.png', cv2.IMREAD_UNCHANGED)
 if ball.shape[2] == 3:
     ball_with_alpha = np.zeros((ball.shape[0], ball.shape[1], 4), dtype=np.uint8)
     ball_with_alpha[:,:,:3] = ball
-    ball_with_alpha[:,:,3] = 255  # Make it fully opaque
+    ball_with_alpha[:,:,3] = 255
     ball = ball_with_alpha
 
 # MediaPipe Face Detection
@@ -97,7 +97,7 @@ def main():
     prev_time = time.time()
     
     # Resize ball to desired size (adjust as needed)
-    ball_width = 50  # For example, 100 pixels wide
+    ball_width = 25 
     ball_aspect_ratio = ball.shape[0] / ball.shape[1]
     ball_height = int(ball_width * ball_aspect_ratio)
     resized_ball = cv2.resize(ball, (ball_width, ball_height))
@@ -118,9 +118,9 @@ def main():
             success, image = cap.read()
             if not success:
                 print("Ignoring empty camera frame.")
-                break  # Ganti continue dengan break jika frame kosong
+                break 
             
-            image = cv2.flip(image, 1)  # agar tidak mirror
+            image = cv2.flip(image, 1)
 
             # Convert the BGR image to RGB
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -159,7 +159,7 @@ def main():
                     # Calculate center point and width between eyes
                     eye_center_x = (left_eye_x + right_eye_x) // 2
                     eye_center_y = (left_eye_y + right_eye_y) // 2
-                    eye_width = int(2.5 * abs(right_eye_x - left_eye_x))  # Make it slightly wider
+                    eye_width = int(2.5 * abs(right_eye_x - left_eye_x))
 
                     # Resize glasses image
                     scale_factor = eye_width / kacamata.shape[1]
@@ -175,9 +175,9 @@ def main():
             direction = sound_direction
             # Gerakkan bola naik atau turun
             if direction == "down":
-                center_y += 10  # Turun
+                center_y += 4
             elif direction == "up":
-                center_y -= 10  # Naik                
+                center_y -= 4               
             
             # Ensure the ball stays within the frame
             center_y = max(0, min(center_y, actual_height - resized_ball.shape[0]))
