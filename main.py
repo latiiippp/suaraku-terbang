@@ -113,7 +113,7 @@ def main():
     with mp_face_detection.FaceDetection(min_detection_confidence=0.5) as face_detection:
         while cap.isOpened():
             # Deteksi suara
-            direction = detect_sound_direction()
+            direction = sound_direction
 
             success, image = cap.read()
             if not success:
@@ -127,7 +127,7 @@ def main():
             
             # Process the image and detect faces
             results = None
-            if frame_count %5 == 0:
+            if frame_count %1 == 0:
                 results = face_detection.process(image_rgb)
             frame_count += 1
             
