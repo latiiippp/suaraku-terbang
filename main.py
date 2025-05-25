@@ -43,8 +43,11 @@ def overlay_transparent(background, overlay, x, y):
     return background
 
 sound_direction = "neutral"
+last_movement_direction = "neutral"  # Tambahan untuk menyimpan arah gerakan terakhir
+sound_info = {"bass_energy": 0, "treble_energy": 0, "dominant_freq": 0}
 
 def detect_sound_direction(duration=0.1, sample_rate=44100):
+    global sound_info, last_movement_direction
     # Ambil data audio selama durasi tertentu
     recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='float32')
     sd.wait()
@@ -59,25 +62,43 @@ def detect_sound_direction(duration=0.1, sample_rate=44100):
     positive_freqs = freqs[:len(freqs)//2]
     positive_magnitudes = magnitudes[:len(magnitudes)//2]
 
-    # Hitung energi di frekuensi rendah (<400Hz) dan tinggi (>2000Hz)
-    low_freq_energy = np.sum(positive_magnitudes[(positive_freqs >= 20) & (positive_freqs <= 400)])
-    high_freq_energy = np.sum(positive_magnitudes[(positive_freqs >= 2000) & (positive_freqs <= 5000)])
-
-    # Tentukan arah gerakan berdasarkan dominan frekuensi
-    if low_freq_energy > high_freq_energy:
-        return "down"
-    elif high_freq_energy > low_freq_energy:
-        return "up"
-    else:
-        return "neutral"
+    # Temukan frekuensi dominan
+    max_magnitude_idx = np.argmax(positive_magnitudes)
+    dominant_freq = positive_freqs[max_magnitude_idx]
     
+    # Hitung energi di frekuensi rendah dan tinggi untuk display
+    bass_energy = np.sum(positive_magnitudes[(positive_freqs >= 20) & (positive_freqs <= 200)])
+    treble_energy = np.sum(positive_magnitudes[(positive_freqs >= 500) & (positive_freqs <= 8000)])
+    
+    # Update sound info
+    sound_info["bass_energy"] = bass_energy
+    sound_info["treble_energy"] = treble_energy
+    sound_info["dominant_freq"] = dominant_freq
+    
+    # Threshold untuk mendeteksi suara yang cukup keras
+    energy_threshold = np.max(positive_magnitudes) * 0.05
+    
+    # Jika energi total terlalu rendah, anggap tidak ada suara
+    if np.max(positive_magnitudes) < energy_threshold:
+        return last_movement_direction  # Tetap gunakan arah gerakan terakhir
+
+    # Logika sederhana berdasarkan frekuensi dominan
+    if dominant_freq < 100:
+        last_movement_direction = "down"  # Update arah gerakan terakhir
+        return "down"  # Frekuensi rendah -> bola turun
+    elif dominant_freq > 200:
+        last_movement_direction = "up"    # Update arah gerakan terakhir
+        return "up"    # Frekuensi tinggi -> bola naik
+    else:
+        return last_movement_direction  # Tetap gunakan arah gerakan terakhir
+
 def sound_thread():
     global sound_direction
     while True:
         sound_direction = detect_sound_direction()
 
 def main():
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     
     # Set resolution to 1920x1080
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -140,6 +161,18 @@ def main():
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
             prev_time = current_time
             
+            # Display sound frequency information
+            cv2.putText(image, f"Dominant Freq: {int(sound_info['dominant_freq'])} Hz", 
+                       (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+            cv2.putText(image, f"Bass Energy: {int(sound_info['bass_energy'])}", 
+                       (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            cv2.putText(image, f"Treble Energy: {int(sound_info['treble_energy'])}", 
+                       (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
+            cv2.putText(image, f"Direction: {sound_direction}", 
+                       (10, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            cv2.putText(image, f"Last Movement: {last_movement_direction}", 
+                       (10, 190), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 165, 0), 2)
+
             # Draw detection results
             if results and results.detections:
                 for detection in results.detections:
