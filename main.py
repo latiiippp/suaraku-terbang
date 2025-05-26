@@ -35,47 +35,37 @@ def overlay_transparent(background, overlay, x, y):
     if x + w > bw: w = bw - x
     if y + h > bh: h = bh - y
     if x < 0: 
-        overlay = overlay[:, -x:]
-        w += x
+        overlay = overlay[:, -x:] # Crop overlay from left
+        w += x # Adjust width
         x = 0
     if y < 0: 
-        overlay = overlay[-y:, :]
-        h += y
+        overlay = overlay[-y:, :] # Crop overlay from top
+        h += y # Adjust height
         y = 0
 
-    if w <= 0 or h <= 0 or overlay is None: # Added check for overlay is None
+    if w <= 0 or h <= 0 or overlay is None:
         return background
 
     overlay_crop = overlay[:h, :w]
     
-    # Ensure overlay_crop has 4 channels if it's valid
     if overlay_crop.shape[2] < 4:
-        # This might happen if the overlay image itself is not RGBA
-        # For simplicity, we'll skip overlaying if it's not RGBA as expected
         print("Warning: Overlay image is not RGBA. Skipping overlay.")
         return background
 
     bg_region = background[y:y+h, x:x+w]
     
-    # Ensure bg_region and overlay_crop are compatible for blending
     if bg_region.shape[0] != overlay_crop.shape[0] or bg_region.shape[1] != overlay_crop.shape[1]:
-        # This can happen due to rounding or extreme cropping, skip if dimensions don't match
         return background
 
     alpha_overlay = overlay_crop[:, :, 3:] / 255.0
     color_overlay = overlay_crop[:, :, :3]
-
-    # Standard alpha blending
-    # C = C_overlay * alpha_overlay + C_background * (1 - alpha_overlay)
     
     blended_color = color_overlay * alpha_overlay + bg_region[:,:,:3] * (1.0 - alpha_overlay)
     
     background[y:y+h, x:x+w, :3] = blended_color.astype(np.uint8)
 
-    # If background has an alpha channel, update it based on overlay's alpha
-    if background.shape[2] == 4:
+    if background.shape[2] == 4: # If background itself has an alpha channel
         alpha_bg_region = bg_region[:, :, 3:] / 255.0
-        # New alpha: alpha_overlay + alpha_bg * (1 - alpha_overlay)
         new_alpha_bg = alpha_overlay + alpha_bg_region * (1.0 - alpha_overlay)
         background[y:y+h, x:x+w, 3] = (new_alpha_bg * 255).astype(np.uint8)
 
@@ -84,6 +74,18 @@ def overlay_transparent(background, overlay, x, y):
 sound_direction = "neutral"
 last_movement_direction = "neutral"
 sound_info = {"bass_energy": 0, "treble_energy": 0, "dominant_freq": 0}
+
+# Level settings
+current_level = 1
+max_level = 5
+# (top_factor, bottom_factor) for barrier y-positions relative to screen height
+level_barrier_settings = {
+    1: (0.30, 0.70),  # Gap: 40% of height
+    2: (0.35, 0.65),  # Gap: 30% of height
+    3: (0.40, 0.60),  # Gap: 20% of height
+    4: (0.425, 0.575), # Gap: 15% of height
+    5: (0.45, 0.55)   # Gap: 10% of height
+}
 
 def detect_sound_direction(duration=0.1, sample_rate=44100):
     global sound_info, last_movement_direction
@@ -98,29 +100,26 @@ def detect_sound_direction(duration=0.1, sample_rate=44100):
     positive_freqs = freqs[:len(freqs)//2]
     positive_magnitudes = magnitudes[:len(magnitudes)//2]
 
-    current_determined_direction = "neutral" # Default
+    current_determined_direction = "neutral" 
 
     if len(positive_magnitudes) == 0 or np.sum(positive_magnitudes) == 0:
         sound_info["bass_energy"] = 0
         sound_info["treble_energy"] = 0
         sound_info["dominant_freq"] = 0
-        # current_determined_direction remains "neutral"
     else:
         max_magnitude_idx = np.argmax(positive_magnitudes)
         dominant_freq = positive_freqs[max_magnitude_idx]
         
-        # Update sound_info for display based on new frequency ranges
         sound_info["bass_energy"] = np.sum(positive_magnitudes[(positive_freqs >= 1) & (positive_freqs <= 150)])
         sound_info["treble_energy"] = np.sum(positive_magnitudes[(positive_freqs > 150)])
         sound_info["dominant_freq"] = dominant_freq
 
         if dominant_freq == 0:
             current_determined_direction = "neutral"
-        elif 1 <= dominant_freq <= 150: # Bass
+        elif 1 <= dominant_freq <= 150: 
             current_determined_direction = "down"
-        elif dominant_freq > 150: # Treble
+        elif dominant_freq > 150: 
             current_determined_direction = "up"
-        # else, it remains "neutral" (e.g., if dominant_freq is somehow negative, though unlikely)
             
     last_movement_direction = current_determined_direction
     return current_determined_direction
@@ -132,6 +131,8 @@ def sound_thread():
         time.sleep(0.01) 
 
 def main():
+    global current_level 
+
     cap = cv2.VideoCapture(0)
     
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -148,9 +149,8 @@ def main():
     prev_time = time.time()
     
     ball_width = 25 
-    if ball is None or ball.shape[1] == 0: # Should be handled by placeholder logic already
+    if ball is None or ball.shape[1] == 0: 
         ball_aspect_ratio = 1 
-        # This block might not be strictly necessary if placeholder is guaranteed
         temp_ball_img = np.zeros((50, 50, 4), dtype=np.uint8)
         cv2.circle(temp_ball_img, (25, 25), 20, (0,0,255,255), -1)
         ball_height = int(ball_width * ball_aspect_ratio)
@@ -160,7 +160,6 @@ def main():
         ball_height = int(ball_width * ball_aspect_ratio)
         resized_ball = cv2.resize(ball, (ball_width, ball_height))
     
-    # Initial ball position: far left, middle vertically
     center_x = 0 
     center_y = actual_height // 2 - resized_ball.shape[0] // 2
 
@@ -193,14 +192,16 @@ def main():
             
             cv2.putText(image, f"Dominant Freq: {int(sound_info['dominant_freq'])} Hz", 
                        (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-            cv2.putText(image, f"Bass Energy (1-150Hz): {int(sound_info['bass_energy'])}", 
+            cv2.putText(image, f"Bass (1-150Hz): {int(sound_info['bass_energy'])}", 
                        (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-            cv2.putText(image, f"Treble Energy (>150Hz): {int(sound_info['treble_energy'])}", 
+            cv2.putText(image, f"Treble (>150Hz): {int(sound_info['treble_energy'])}", 
                        (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
             cv2.putText(image, f"Direction: {sound_direction}", 
                        (10, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             cv2.putText(image, f"Last Movement: {last_movement_direction}", 
                        (10, 190), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 165, 0), 2)
+            cv2.putText(image, f"Level: {current_level}",
+                       (actual_width - 150, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
 
             if results and results.detections:
                 for detection in results.detections:
@@ -228,27 +229,38 @@ def main():
                         top_left_y = eye_center_y - gh // 2
                         image = overlay_transparent(image, new_glasses, top_left_x, top_left_y)
             
-            current_sound_direction = sound_direction 
+            current_sound_direction_val = sound_direction 
             
             ball_speed_vertical = 4
             ball_speed_horizontal = 2 
 
-            if current_sound_direction == "down": # Freq 1-150 Hz
-                center_y += ball_speed_vertical
-                center_x += ball_speed_horizontal 
-            elif current_sound_direction == "up": # Freq > 150 Hz
-                center_y -= ball_speed_vertical
+            if current_sound_direction_val != "neutral":
                 center_x += ball_speed_horizontal
-            # Jika current_sound_direction == "neutral" (Freq == 0 Hz), bola tetap diam
+                if current_sound_direction_val == "down": 
+                    center_y += ball_speed_vertical
+                elif current_sound_direction_val == "up": 
+                    center_y -= ball_speed_vertical
             
-            # Batasan pergerakan bola
             center_y = max(0, min(center_y, actual_height - resized_ball.shape[0]))
+            
+            if center_x + resized_ball.shape[1] >= actual_width:
+                if current_level < max_level:
+                    current_level += 1
+                    print(f"Level Up! Current Level: {current_level}")
+                else:
+                    print("Max Level Reached! Resetting to Level 1 or staying at max.")
+                    # Optional: Reset to level 1 or keep at max level
+                    # current_level = 1 
+                center_x = 0
+                center_y = actual_height // 2 - resized_ball.shape[0] // 2
+
             center_x = max(0, min(center_x, actual_width - resized_ball.shape[1])) 
             
             image = overlay_transparent(image, resized_ball, center_x, center_y)
             
-            top_barrier_y = int(actual_height * 0.35)
-            bottom_barrier_y = int(actual_height * 0.65)
+            top_barrier_factor, bottom_barrier_factor = level_barrier_settings[current_level]
+            top_barrier_y = int(actual_height * top_barrier_factor)
+            bottom_barrier_y = int(actual_height * bottom_barrier_factor)
             barrier_color = (67, 67, 84) 
             barrier_thickness = 3
             
