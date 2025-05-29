@@ -878,8 +878,8 @@ def main():
     cap = cv2.VideoCapture(0)
     
     # Wider resolution to better accommodate webcam feed and info panel
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Increased from 1024
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)  # Increased from 600
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1024)  
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 600)  
     
     if not cap.isOpened():
         print("Error: Could not open webcam.")
@@ -981,7 +981,6 @@ def main():
 
                         if eye_width > 0: 
                             scale_factor = eye_width / kacamata.shape[1]
-                            # MODIFIED: Ensure new_glasses has positive dimensions before overlay
                             if scale_factor > 0:
                                 new_glasses_width = int(kacamata.shape[1] * scale_factor)
                                 new_glasses_height = int(kacamata.shape[0] * scale_factor)
@@ -1011,8 +1010,8 @@ def main():
             current_sound_direction_val = sound_direction 
             
             # --- MODIFIKASI KECEPATAN BOLA ---
-            ball_speed_vertical = 6  # Sebelumnya 4, dinaikkan menjadi 6 (atau sesuai keinginanmu)
-            ball_speed_horizontal = 3 # Sebelumnya 2, dinaikkan menjadi 3 (atau sesuai keinginanmu)
+            ball_speed_vertical = 6.5
+            ball_speed_horizontal = 4
 
             if current_sound_direction_val != "neutral":
                 center_x += ball_speed_horizontal
@@ -1043,16 +1042,13 @@ def main():
             bottom_barrier_y = int(actual_height * bottom_barrier_factor)
             barrier_thickness = 3
             
-            # --- MODIFIKASI LOGIKA GAME OVER ---
+            # logika game over
             if collision_cooldown <= 0:
                 if check_collision_with_barriers(center_x, center_y, resized_ball.shape[1], 
                                                  resized_ball.shape[0], top_barrier_y, bottom_barrier_y, barrier_thickness):
                     print(f"Collision! Game Over. Final Score: {current_score}")
-                    collision_flash = 30 # Untuk efek visual sesaat sebelum game over
-                    game_over = True # Langsung game over
-                    # current_score -= barrier_penalty # Penalti skor tidak lagi relevan jika langsung game over
-                    # if current_score <= 0: # Cek skor <= 0 tidak lagi relevan
-                    # game_over = True
+                    collision_flash = 30 
+                    game_over = True 
             else:
                 collision_cooldown -= 1
             
@@ -1064,11 +1060,6 @@ def main():
             update_particles()
             
             draw_ball_trail(frame_buffer)
-            
-            # Pastikan frame_buffer dan resized_ball adalah RGBA jika overlay_transparent mengharapkannya
-            # Jika frame_buffer adalah BGR (umumnya dari webcam), dan resized_ball adalah RGBA,
-            # overlay_transparent harus menangani ini.
-            # Dari kode overlay_transparent, ia menangani background BGR dan overlay RGBA.
             frame_buffer = overlay_transparent(frame_buffer, resized_ball, center_x, center_y)
             
             draw_modern_barriers(frame_buffer, game_view_width, window_height, top_barrier_y, bottom_barrier_y, barrier_thickness)
@@ -1087,7 +1078,7 @@ def main():
             print(f"Final Score on Game Over Screen: {current_score}") # Skor yang ditampilkan adalah skor saat game over
             game_over_img = draw_modern_game_over(actual_width, actual_height, current_score, max_score_achieved)
             cv2.imshow('Suaraku Terbang', game_over_img)
-            cv2.waitKey(0) # Tunggu input sebelum menutup
+            cv2.waitKey(0) 
                 
     cap.release()
     cv2.destroyAllWindows()
