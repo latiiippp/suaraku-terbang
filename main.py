@@ -1058,7 +1058,7 @@ def main():
             current_sound_direction_val = sound_direction 
             
             # --- MODIFIKASI KECEPATAN BOLA ---
-            ball_speed_vertical = 6
+            ball_speed_vertical = 3
             ball_speed_horizontal = 3
 
             if current_sound_direction_val != "neutral":
