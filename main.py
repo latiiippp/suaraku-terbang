@@ -120,40 +120,44 @@ level_barrier_settings = {
 
 def detect_sound_direction(duration=0.1, sample_rate=44100):
     global sound_info, last_movement_direction
-    recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=4, dtype='float32', device=1)
-    sd.wait()
-    audio_data = recording.flatten()
+    try:
+        recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='float32', device=1)
+        sd.wait()
+        audio_data = recording.flatten()
 
-    fft = np.fft.fft(audio_data)
-    freqs = np.fft.fftfreq(len(fft), 1/sample_rate)
-    magnitudes = np.abs(fft)
+        fft = np.fft.fft(audio_data)
+        freqs = np.fft.fftfreq(len(fft), 1/sample_rate)
+        magnitudes = np.abs(fft)
 
-    positive_freqs = freqs[:len(freqs)//2]
-    positive_magnitudes = magnitudes[:len(magnitudes)//2]
+        positive_freqs = freqs[:len(freqs)//2]
+        positive_magnitudes = magnitudes[:len(magnitudes)//2]
 
-    current_determined_direction = "neutral" 
+        current_determined_direction = "neutral" 
 
-    if len(positive_magnitudes) == 0 or np.sum(positive_magnitudes) == 0:
-        sound_info["bass_energy"] = 0
-        sound_info["treble_energy"] = 0
-        sound_info["dominant_freq"] = 0
-    else:
-        max_magnitude_idx = np.argmax(positive_magnitudes)
-        dominant_freq = positive_freqs[max_magnitude_idx]
-        
-        sound_info["bass_energy"] = np.sum(positive_magnitudes[(positive_freqs >= 1) & (positive_freqs <= 150)])
-        sound_info["treble_energy"] = np.sum(positive_magnitudes[(positive_freqs > 150)])
-        sound_info["dominant_freq"] = dominant_freq
-
-        if dominant_freq == 0:
-            current_determined_direction = "neutral"
-        elif 1 <= dominant_freq <= 150: 
-            current_determined_direction = "down"
-        elif dominant_freq > 150: 
-            current_determined_direction = "up"
+        if len(positive_magnitudes) == 0 or np.sum(positive_magnitudes) == 0:
+            sound_info["bass_energy"] = 0
+            sound_info["treble_energy"] = 0
+            sound_info["dominant_freq"] = 0
+        else:
+            max_magnitude_idx = np.argmax(positive_magnitudes)
+            dominant_freq = positive_freqs[max_magnitude_idx]
             
-    last_movement_direction = current_determined_direction
-    return current_determined_direction
+            sound_info["bass_energy"] = np.sum(positive_magnitudes[(positive_freqs >= 1) & (positive_freqs <= 150)])
+            sound_info["treble_energy"] = np.sum(positive_magnitudes[(positive_freqs > 150)])
+            sound_info["dominant_freq"] = dominant_freq
+
+            if dominant_freq == 0:
+                current_determined_direction = "neutral"
+            elif 1 <= dominant_freq <= 150: 
+                current_determined_direction = "down"
+            elif dominant_freq > 150: 
+                current_determined_direction = "up"
+                
+        last_movement_direction = current_determined_direction
+        return current_determined_direction
+    except Exception as e:
+        print(f"Audio error: {e}")
+        return "neutral"
 
 def sound_thread():
     global sound_direction
@@ -575,90 +579,105 @@ def draw_sound_visualizer(img, x, y, width, height, sound_info):
         
         cv2.rectangle(img, (bar_x, bar_y), (bar_x + bar_width - 2, y + height), color, -1)
 
-def draw_advanced_hud(img, width, height, fps, score, level, sound_info, sound_direction, collision_flash, level_up_flash):
-    """Advanced HUD with glassmorphism and animations"""
-    global ui_animations
+def draw_frequency_display(img, x, y, width, height, sound_info):
+    """Draw large frequency number display"""
+    freq = int(sound_info['dominant_freq'])
     
-    # Update animations
-    ui_animations["score_pulse"] = (ui_animations["score_pulse"] + 1) % 60
-    ui_animations["level_glow"] = (ui_animations["level_glow"] + 1) % 120
-    ui_animations["particle_time"] = (ui_animations["particle_time"] + 1) % 360
+    # Background panel
+    panel_color = (30, 30, 50)
+    cv2.rectangle(img, (x, y), (x + width, y + height), panel_color, -1)
+    cv2.rectangle(img, (x, y), (x + width, y + height), color_schemes["primary"], 2)
     
-    # Top HUD panel with glassmorphism
-    panel_height = 100
-    # Ensure panel dimensions are valid
-    if width > 10 and panel_height > 10:
-        draw_glassmorphism_panel(img, (0, 0), (width, panel_height), 15, 0.4)
+    # Title
+    cv2.putText(img, "FREQUENCY", (x + 10, y + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color_schemes["text_secondary"], 2)
     
-    # Animated score with glow effect
-    score_pulse = abs(np.sin(ui_animations["score_pulse"] * 0.1))
-    score_glow = int(50 + score_pulse * 50)
+    # Large frequency number
+    freq_text = f"{freq}"
+    freq_color = color_schemes["warning"] if freq > 150 else color_schemes["secondary"] if freq > 0 else color_schemes["text_secondary"]
     
-    # Score with multiple glow layers
+    # Glow effect for frequency
     for i in range(3):
-        glow_alpha = (0.3 - i * 0.1) * score_pulse
+        glow_alpha = 0.3 - i * 0.1
         glow_offset = i * 2
         overlay = img.copy()
-        cv2.putText(overlay, f"{score}", (30 + glow_offset, 60 + glow_offset), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 2, color_schemes["success"], 3)
+        cv2.putText(overlay, freq_text, (x + 15 + glow_offset, y + 70 + glow_offset), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 2.5, freq_color, 4)
         cv2.addWeighted(img, 1-glow_alpha, overlay, glow_alpha, 0, img)
     
-    cv2.putText(img, "SCORE", (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color_schemes["text_secondary"], 2)
-    cv2.putText(img, f"{score}", (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 2, color_schemes["text_primary"], 3)
+    cv2.putText(img, freq_text, (x + 15, y + 70), cv2.FONT_HERSHEY_SIMPLEX, 2.5, color_schemes["text_primary"], 3)
+    cv2.putText(img, "Hz", (x + 15, y + 95), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color_schemes["text_secondary"], 2)
+
+def draw_game_info_panel(img, x, y, width, height, score, level, fps):
+    """Draw game information panel"""
+    # Background
+    panel_color = (25, 25, 40)
+    cv2.rectangle(img, (x, y), (x + width, y + height), panel_color, -1)
+    cv2.rectangle(img, (x, y), (x + width, y + height), color_schemes["primary"], 2)
     
-    # Animated level indicator
-    level_progress = level / max_level
-    level_glow = abs(np.sin(ui_animations["level_glow"] * 0.05))
+    # Title
+    cv2.putText(img, "GAME INFO", (x + 10, y + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color_schemes["text_primary"], 2)
     
-    # Level text
-    cv2.putText(img, "LEVEL", (width - 200, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color_schemes["text_secondary"], 2)
-    cv2.putText(img, f"{level}", (width - 200, 60), cv2.FONT_HERSHEY_SIMPLEX, 2, color_schemes["primary"], 3)
+    current_y = y + 50
     
-    # Circular progress indicator for level
-    center = (width - 100, 50)
-    radius = 30
+    # Score section
+    cv2.putText(img, "SCORE:", (x + 10, current_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color_schemes["text_secondary"], 1)
+    score_color = color_schemes["success"]
+    cv2.putText(img, f"{score}", (x + 90, current_y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, score_color, 2)
+    current_y += 35
     
-    # Background circle
-    cv2.circle(img, center, radius, color_schemes["background_light"], 3)
+    # Level section
+    cv2.putText(img, "LEVEL:", (x + 10, current_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color_schemes["text_secondary"], 1)
+    level_color = color_schemes["primary"]
+    cv2.putText(img, f"{level}/{max_level}", (x + 90, current_y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, level_color, 2)
+    current_y += 35
     
-    # Progress arc
-    angle = int(360 * level_progress)
-    if angle > 0:
-        # Create arc points
-        arc_color = tuple(int(c + level_glow * 50) for c in color_schemes["secondary"])
-        for i in range(angle):
-            x = int(center[0] + radius * np.cos(np.radians(i - 90)))
-            y = int(center[1] + radius * np.sin(np.radians(i - 90)))
-            cv2.circle(img, (x, y), 3, arc_color, -1)
+    # Level progress bar
+    bar_width = width - 20
+    bar_height = 8
+    bar_x = x + 10
+    bar_y = current_y
     
-    # Side panel for audio visualization
-    panel_x, panel_y = 20, 120
-    panel_width, panel_height = 300, height - 140
+    # Background bar
+    cv2.rectangle(img, (bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height), (60, 60, 60), -1)
     
-    # Ensure panel dimensions are valid
-    if panel_width > 10 and panel_height > 10 and panel_x + panel_width <= width and panel_y + panel_height <= height:
-        draw_glassmorphism_panel(img, (panel_x, panel_y), (panel_x + panel_width, panel_y + panel_height), 15, 0.35)
+    # Progress
+    progress = level / max_level
+    progress_width = int(bar_width * progress)
+    if progress_width > 0:
+        cv2.rectangle(img, (bar_x, bar_y), (bar_x + progress_width, bar_y + bar_height), level_color, -1)
     
-    # Audio section header
-    cv2.putText(img, "AUDIO CONTROL", (panel_x + 20, panel_y + 30), 
-               cv2.FONT_HERSHEY_SIMPLEX, 0.6, color_schemes["text_primary"], 2)
+    current_y += 35
     
-    # Sound visualizer
-    visualizer_y = panel_y + 50
-    draw_sound_visualizer(img, panel_x + 20, visualizer_y, panel_width - 40, 80, sound_info)
+    # FPS
+    cv2.putText(img, "FPS:", (x + 10, current_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_schemes["text_secondary"], 1)
+    fps_color = color_schemes["success"] if fps > 30 else color_schemes["warning"] if fps > 15 else color_schemes["danger"]
+    cv2.putText(img, f"{int(fps)}", (x + 60, current_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, fps_color, 2)
+
+def draw_audio_control_panel(img, x, y, width, height, sound_info, sound_direction):
+    """Draw audio control information panel"""
+    # Background
+    panel_color = (25, 25, 40)
+    cv2.rectangle(img, (x, y), (x + width, y + height), panel_color, -1)
+    cv2.rectangle(img, (x, y), (x + width, y + height), color_schemes["secondary"], 2)
     
-    # Direction indicator with smooth animation
-    direction_y = visualizer_y + 100
+    # Title
+    cv2.putText(img, "AUDIO CONTROL", (x + 10, y + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color_schemes["text_primary"], 2)
+    
+    current_y = y + 50
+    
+    # Direction indicator
     direction_colors = {
         "up": color_schemes["success"],
         "down": color_schemes["warning"],
         "neutral": color_schemes["text_secondary"]
     }
     
+    cv2.putText(img, "DIRECTION:", (x + 10, current_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color_schemes["text_secondary"], 1)
     current_color = direction_colors.get(sound_direction, color_schemes["text_secondary"])
+    cv2.putText(img, sound_direction.upper(), (x + 10, current_y + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.8, current_color, 2)
     
-    # Animated direction arrow
-    arrow_center = (panel_x + 150, direction_y + 20)
+    # Direction arrow
+    arrow_center = (x + width - 40, current_y + 10)
     arrow_size = 15
     
     if sound_direction == "up":
@@ -678,33 +697,129 @@ def draw_advanced_hud(img, width, height, fps, score, level, sound_info, sound_d
     else:
         cv2.circle(img, arrow_center, arrow_size//2, current_color, -1)
     
-    cv2.putText(img, f"DIRECTION: {sound_direction.upper()}", 
-               (panel_x + 20, direction_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, current_color, 1)
+    current_y += 60
     
-    # FPS and performance info
-    cv2.putText(img, f"FPS: {int(fps)}", (panel_x + 20, panel_y + panel_height - 20), 
-               cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_schemes["text_secondary"], 1)
+    # Audio energy bars
+    cv2.putText(img, "BASS ENERGY:", (x + 10, current_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_schemes["text_secondary"], 1)
+    current_y += 20
     
-    # Flash effects with smooth transitions
+    # Bass bar
+    bass_energy = min(int(sound_info['bass_energy'] / 50), 100)
+    bar_width = width - 20
+    bar_height = 8
+    bar_x = x + 10
+    bar_y = current_y
+    
+    cv2.rectangle(img, (bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height), (50, 50, 50), -1)
+    if bass_energy > 0:
+        bass_fill_width = int(bar_width * bass_energy / 100)
+        cv2.rectangle(img, (bar_x, bar_y), (bar_x + bass_fill_width, bar_y + bar_height), color_schemes["secondary"], -1)
+    
+    current_y += 30
+    
+    # Treble energy
+    cv2.putText(img, "TREBLE ENERGY:", (x + 10, current_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_schemes["text_secondary"], 1)
+    current_y += 20
+    
+    # Treble bar
+    treble_energy = min(int(sound_info['treble_energy'] / 50), 100)
+    bar_y = current_y
+    
+    cv2.rectangle(img, (bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height), (50, 50, 50), -1)
+    if treble_energy > 0:
+        treble_fill_width = int(bar_width * treble_energy / 100)
+        cv2.rectangle(img, (bar_x, bar_y), (bar_x + treble_fill_width, bar_y + bar_height), color_schemes["warning"], -1)
+
+def draw_split_interface(img, width, height, fps, score, level, sound_info, sound_direction, collision_flash, level_up_flash):
+    """Draw split interface with game view and information panels"""
+    # Define layout - make info panel narrower to show more of webcam
+    info_panel_width = 250  # Reduced from 280
+    game_view_width = width - info_panel_width
+    
+    # Don't draw game view background - keep webcam as background
+    # Only draw info panel background (right side)
+    info_bg_color = (15, 15, 25)
+    cv2.rectangle(img, (game_view_width, 0), (width, height), info_bg_color, -1)
+    
+    # Separator line
+    cv2.line(img, (game_view_width, 0), (game_view_width, height), color_schemes["primary"], 3)
+    
+    # Information panels on the right side - make more compact
+    panel_x = game_view_width + 5  # Reduced from 10
+    panel_width = info_panel_width - 10  # Reduced from 20
+    
+    # Frequency display (top) - make slightly smaller
+    freq_height = 110  # Reduced from 120
+    draw_frequency_display(img, panel_x, 10, panel_width, freq_height, sound_info)
+    
+    # Game info panel - make slightly smaller
+    game_info_y = freq_height + 15  # Reduced from 20
+    game_info_height = 160  # Reduced from 180
+    draw_game_info_panel(img, panel_x, game_info_y, panel_width, game_info_height, score, level, fps)
+    
+    # Audio control panel
+    audio_y = game_info_y + game_info_height + 10
+    audio_height = height - audio_y - 10
+    draw_audio_control_panel(img, panel_x, audio_y, panel_width, audio_height, sound_info, sound_direction)
+    
+    # Flash effects only on game view
     if collision_flash > 0:
         flash_intensity = collision_flash / 30.0
-        flash_overlay = np.zeros_like(img)
+        flash_overlay = np.zeros((height, game_view_width, 3), dtype=np.uint8)
         flash_overlay[:] = color_schemes["danger"]
-        cv2.addWeighted(img, 1 - flash_intensity * 0.3, flash_overlay, flash_intensity * 0.3, 0, img)
+        cv2.addWeighted(img[:, :game_view_width], 1 - flash_intensity * 0.3, flash_overlay, flash_intensity * 0.3, 0, img[:, :game_view_width])
         
         # Add particles on collision
-        if collision_flash == 30:  # First frame of collision
-            add_particles(width//2, height//2, color_schemes["danger"], 20)
+        if collision_flash == 30:
+            add_particles(game_view_width//2, height//2, color_schemes["danger"], 20)
     
     if level_up_flash > 0:
         flash_intensity = level_up_flash / 60.0
-        flash_overlay = np.zeros_like(img)
+        flash_overlay = np.zeros((height, game_view_width, 3), dtype=np.uint8)
         flash_overlay[:] = color_schemes["success"]
-        cv2.addWeighted(img, 1 - flash_intensity * 0.2, flash_overlay, flash_intensity * 0.2, 0, img)
+        cv2.addWeighted(img[:, :game_view_width], 1 - flash_intensity * 0.2, flash_overlay, flash_intensity * 0.2, 0, img[:, :game_view_width])
         
         # Add celebration particles
-        if level_up_flash == 60:  # First frame of level up
-            add_particles(width//2, 100, color_schemes["success"], 30)
+        if level_up_flash == 60:
+            add_particles(game_view_width//2, 100, color_schemes["success"], 30)
+    
+    return game_view_width
+
+def draw_game_view_overlay(img, game_view_width, height, current_level):
+    """Draw minimal overlay on game view with semi-transparent background"""
+    
+    # Level indicator with background (top left of game view)
+    level_text = f"LEVEL {current_level}"
+    text_size = cv2.getTextSize(level_text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)[0]
+    
+    # Semi-transparent background for level text
+    overlay = img.copy()
+    cv2.rectangle(overlay, (10, 5), (text_size[0] + 30, 40), (0, 0, 0), -1)
+    cv2.addWeighted(img, 0.7, overlay, 0.3, 0, img)
+    
+    cv2.putText(img, level_text, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color_schemes["text_primary"], 2)
+    
+    # Instructions with background (bottom of game view)
+    instruction_y = height - 60
+    instructions = [
+        "Use your voice to control the ball",
+        "High pitch = UP, Low pitch = DOWN"
+    ]
+    
+    # Calculate background size for instructions
+    max_text_width = 0
+    for instruction in instructions:
+        text_size = cv2.getTextSize(instruction, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
+        max_text_width = max(max_text_width, text_size[0])
+    
+    # Semi-transparent background for instructions
+    overlay = img.copy()
+    cv2.rectangle(overlay, (10, instruction_y - 15), (max_text_width + 30, height - 10), (0, 0, 0), -1)
+    cv2.addWeighted(img, 0.7, overlay, 0.3, 0, img)
+    
+    # Draw instructions
+    for i, instruction in enumerate(instructions):
+        cv2.putText(img, instruction, (20, instruction_y + i * 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_schemes["text_secondary"], 1)
 
 def draw_start_screen(width, height):
     """Create an attractive start screen"""
@@ -742,21 +857,26 @@ def draw_start_screen(width, height):
     
     # Instructions
     instructions = [
-        "Use your voice to control the ball:",
+        "Voice-Controlled Ball Game",
+        "",
+        "How to play:",
         "• High pitch sounds = Move UP",
         "• Low pitch sounds = Move DOWN", 
         "• Navigate through barriers",
         "• Reach the end to level up!",
+        "• Avoid hitting barriers to keep score",
         "",
         "Press SPACE to start"
     ]
     
-    instruction_y = title_y + 80
+    instruction_y = title_y + 60
     for instruction in instructions:
         if instruction:
+            font_size = 0.7 if instruction == "Voice-Controlled Ball Game" else 0.5
+            color = color_schemes["text_primary"] if instruction == "Voice-Controlled Ball Game" else color_schemes["text_secondary"]
             cv2.putText(start_img, instruction, (panel_x + 50, instruction_y), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, color_schemes["text_secondary"], 1)
-        instruction_y += 30
+                       cv2.FONT_HERSHEY_SIMPLEX, font_size, color, 1 if font_size == 0.5 else 2)
+        instruction_y += 25
     
     return start_img
 
@@ -765,8 +885,9 @@ def main():
 
     cap = cv2.VideoCapture(1)
     
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    # Wider resolution to better accommodate webcam feed and info panel
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Increased from 1024
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)  # Increased from 600
     
     if not cap.isOpened():
         print("Error: Could not open webcam.")
@@ -775,6 +896,19 @@ def main():
     actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     print(f"Camera resolution: {actual_width}x{actual_height}")
+    
+    # Get webcam's native aspect ratio to ensure proper display
+    webcam_aspect_ratio = actual_width / actual_height
+    
+    # Calculate the ideal game view width based on the webcam's aspect ratio
+    desired_game_view_height = actual_height
+    desired_game_view_width = int(desired_game_view_height * webcam_aspect_ratio)
+    
+    # Total window width needs to accommodate both game view and info panel
+    window_width = desired_game_view_width + 250  # 250 is info panel width
+    window_height = actual_height
+    
+    print(f"Window dimensions: {window_width}x{window_height}")
     
     prev_time = time.time()
     max_score_achieved = current_score
@@ -796,13 +930,14 @@ def main():
 
     threading.Thread(target=sound_thread, daemon=True).start()
 
+    # Initialize frame_count before using it
     frame_count = 0
     collision_cooldown = 0
     
     # Show start screen
     while not game_started:
         start_img = draw_start_screen(actual_width, actual_height)
-        cv2.imshow('MediaPipe Face Detection', start_img)
+        cv2.imshow('Suaraku Terbang', start_img)
         
         key = cv2.waitKey(30) & 0xFF
         if key == ord(' '):
@@ -822,9 +957,6 @@ def main():
             image = cv2.flip(image, 1)
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             
-            # Draw animated background
-            draw_animated_background(image, actual_width, actual_height)
-            
             results = None
             if frame_count % 1 == 0:
                 results = face_detection.process(image_rgb)
@@ -837,10 +969,9 @@ def main():
             
             max_score_achieved = max(max_score_achieved, current_score)
 
+            # Face detection for glasses overlay
             if results and results.detections:
                 for detection in results.detections:
-                    mp_drawing.draw_detection(image, detection)
-                    
                     if kacamata is not None and kacamata.shape[1] > 0:
                         keypoints = detection.location_data.relative_keypoints
                         left_eye = keypoints[0]
@@ -855,14 +986,33 @@ def main():
                         eye_center_y = (left_eye_y + right_eye_y) // 2
                         eye_width = int(2.5 * abs(right_eye_x - left_eye_x))
 
-                        scale_factor = eye_width / kacamata.shape[1]
-                        new_glasses = cv2.resize(kacamata, (0, 0), fx=scale_factor, fy=scale_factor)
+                        if eye_width > 0:  # Ensure valid eye width
+                            scale_factor = eye_width / kacamata.shape[1]
+                            new_glasses = cv2.resize(kacamata, (0, 0), fx=scale_factor, fy=scale_factor)
 
-                        gh, gw = new_glasses.shape[:2]
-                        top_left_x = eye_center_x - gw // 2
-                        top_left_y = eye_center_y - gh // 2
-                        image = overlay_transparent(image, new_glasses, top_left_x, top_left_y)
+                            gh, gw = new_glasses.shape[:2]
+                            top_left_x = eye_center_x - gw // 2
+                            top_left_y = eye_center_y - gh // 2
+                            image = overlay_transparent(image, new_glasses, top_left_x, top_left_y)
             
+            # Create a frame buffer with the correct window dimensions
+            frame_buffer = np.zeros((window_height, window_width, 3), dtype=np.uint8)
+            
+            # If image dimensions don't match window dimensions, resize or pad
+            if image.shape[0] != window_height or image.shape[1] != window_width:
+                # Resize image to fit the desired game view area while preserving aspect ratio
+                display_img = cv2.resize(image, (desired_game_view_width, desired_game_view_height))
+                
+                # Copy the resized image into the frame buffer
+                frame_buffer[:display_img.shape[0], :display_img.shape[1]] = display_img
+            else:
+                frame_buffer = image.copy()
+            
+            # Draw split interface (this will preserve webcam background in game area)
+            game_view_width = draw_split_interface(frame_buffer, window_width, window_height, fps, current_score, 
+                                                current_level, sound_info, sound_direction, collision_flash, level_up_flash)
+            
+            # Ball movement logic (only in game view area)
             current_sound_direction_val = sound_direction 
             
             ball_speed_vertical = 4
@@ -880,19 +1030,19 @@ def main():
             # Add ball trail
             add_ball_trail(center_x + resized_ball.shape[1]//2, center_y + resized_ball.shape[0]//2)
             
-            # Level up logic
-            if center_x + resized_ball.shape[1] >= actual_width:
+            # Level up logic (use game view width instead of full width)
+            if center_x + resized_ball.shape[1] >= game_view_width:
                 if current_level < max_level:
                     current_level += 1
-                    current_score += score_per_level  # Bonus for leveling up
-                    level_up_flash = 60  # Start level up animation
+                    current_score += score_per_level
+                    level_up_flash = 60
                     print(f"Level Up! Current Level: {current_level}, Score: {current_score}")
                 else:
-                    print("Max Level Reached! Resetting to Level 1 or staying at max.")
+                    print("Max Level Reached!")
                 center_x = 0
                 center_y = actual_height // 2 - resized_ball.shape[0] // 2
 
-            center_x = max(0, min(center_x, actual_width - resized_ball.shape[1])) 
+            center_x = max(0, min(center_x, game_view_width - resized_ball.shape[1])) 
             
             # Calculate barrier positions
             top_barrier_factor, bottom_barrier_factor = level_barrier_settings[current_level]
@@ -900,51 +1050,56 @@ def main():
             bottom_barrier_y = int(actual_height * bottom_barrier_factor)
             barrier_thickness = 3
             
-            # Collision detection with cooldown
+            # Collision detection
             if collision_cooldown <= 0:
                 if check_collision_with_barriers(center_x, center_y, resized_ball.shape[1], 
                                                 resized_ball.shape[0], top_barrier_y, bottom_barrier_y, barrier_thickness):
                     current_score -= barrier_penalty
-                    collision_cooldown = 30  # 30 frames cooldown
-                    collision_flash = 30  # Start collision animation
+                    collision_cooldown = 30
+                    collision_flash = 30
                     print(f"Collision! Score reduced to: {current_score}")
                     
-                    # Check game over
                     if current_score <= 0:
                         game_over = True
                         print("Game Over! Score reached zero.")
             else:
                 collision_cooldown -= 1
             
+            # Update animation counters
+            if collision_flash > 0:
+                collision_flash -= 1
+            if level_up_flash > 0:
+                level_up_flash -= 1
+            
             # Update and draw particles
             update_particles()
             
-            # Draw ball trail
-            draw_ball_trail(image)
+            # Draw ball trail (only in game view)
+            draw_ball_trail(frame_buffer)
             
-            image = overlay_transparent(image, resized_ball, center_x, center_y)
+            # Draw ball
+            frame_buffer = overlay_transparent(frame_buffer, resized_ball, center_x, center_y)
             
-            # Draw modern barriers
-            draw_modern_barriers(image, actual_width, actual_height, top_barrier_y, bottom_barrier_y, barrier_thickness)
+            # Draw barriers (only in game view)
+            draw_modern_barriers(frame_buffer, game_view_width, window_height, top_barrier_y, bottom_barrier_y, barrier_thickness)
             
             # Draw particles
-            draw_particles(image)
+            draw_particles(frame_buffer)
             
-            # Draw advanced HUD
-            draw_advanced_hud(image, actual_width, actual_height, fps, current_score, current_level, 
-                            sound_info, sound_direction, collision_flash, level_up_flash)
+            # Draw game view overlay
+            draw_game_view_overlay(frame_buffer, game_view_width, window_height, current_level)
             
-            cv2.imshow('MediaPipe Face Detection', image)
+            cv2.imshow('Suaraku Terbang', frame_buffer)
             
             key = cv2.waitKey(5) & 0xFF 
-            if key == 27 or cv2.getWindowProperty('MediaPipe Face Detection', cv2.WND_PROP_VISIBLE) < 1:
+            if key == 27 or cv2.getWindowProperty('Suaraku Terbang', cv2.WND_PROP_VISIBLE) < 1:
                 break
         
         # Game over screen
         if game_over:
             print(f"Final Score: {current_score}")
             game_over_img = draw_modern_game_over(actual_width, actual_height, current_score, max_score_achieved)
-            cv2.imshow('MediaPipe Face Detection', game_over_img)
+            cv2.imshow('Suaraku Terbang', game_over_img)
             cv2.waitKey(0)
                 
     cap.release()
