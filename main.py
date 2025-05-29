@@ -78,6 +78,12 @@ sound_info = {"bass_energy": 0, "treble_energy": 0, "dominant_freq": 0}
 # Level settings
 current_level = 1
 max_level = 5
+# Scoring system
+current_score = 100
+score_per_level = 50
+barrier_penalty = 10
+game_over = False
+
 # (top_factor, bottom_factor) for barrier y-positions relative to screen height
 level_barrier_settings = {
     1: (0.30, 0.70),  # Gap: 40% of height
@@ -89,7 +95,7 @@ level_barrier_settings = {
 
 def detect_sound_direction(duration=0.1, sample_rate=44100):
     global sound_info, last_movement_direction
-    recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='float32', device=31)
+    recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=4, dtype='float32', device=1)
     sd.wait()
     audio_data = recording.flatten()
 
@@ -130,10 +136,25 @@ def sound_thread():
         sound_direction = detect_sound_direction()
         time.sleep(0.01) 
 
-def main():
-    global current_level 
+def check_collision_with_barriers(ball_x, ball_y, ball_width, ball_height, top_barrier_y, bottom_barrier_y, barrier_thickness):
+    """Check if ball collides with top or bottom barriers"""
+    ball_top = ball_y
+    ball_bottom = ball_y + ball_height
+    
+    # Check collision with top barrier
+    if ball_top <= top_barrier_y + barrier_thickness:
+        return True
+    
+    # Check collision with bottom barrier  
+    if ball_bottom >= bottom_barrier_y:
+        return True
+        
+    return False
 
-    cap = cv2.VideoCapture(0)
+def main():
+    global current_level, current_score, game_over
+
+    cap = cv2.VideoCapture(1)
     
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
@@ -166,9 +187,10 @@ def main():
     threading.Thread(target=sound_thread, daemon=True).start()
 
     frame_count = 0
+    collision_cooldown = 0  # Prevent multiple penalties in quick succession
     
     with mp_face_detection.FaceDetection(min_detection_confidence=0.5) as face_detection:
-        while cap.isOpened():
+        while cap.isOpened() and not game_over:
             success, image = cap.read()
             if not success:
                 print("Ignoring empty camera frame.")
@@ -189,6 +211,10 @@ def main():
                 cv2.putText(image, f"FPS: {int(fps)}", (10, 30), 
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
             prev_time = current_time
+            
+            # Score display
+            cv2.putText(image, f"Score: {current_score}", 
+                       (actual_width - 150, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
             
             cv2.putText(image, f"Dominant Freq: {int(sound_info['dominant_freq'])} Hz", 
                        (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
@@ -243,10 +269,12 @@ def main():
             
             center_y = max(0, min(center_y, actual_height - resized_ball.shape[0]))
             
+            # Level up logic
             if center_x + resized_ball.shape[1] >= actual_width:
                 if current_level < max_level:
                     current_level += 1
-                    print(f"Level Up! Current Level: {current_level}")
+                    current_score += score_per_level  # Bonus for leveling up
+                    print(f"Level Up! Current Level: {current_level}, Score: {current_score}")
                 else:
                     print("Max Level Reached! Resetting to Level 1 or staying at max.")
                     # Optional: Reset to level 1 or keep at max level
@@ -256,13 +284,29 @@ def main():
 
             center_x = max(0, min(center_x, actual_width - resized_ball.shape[1])) 
             
-            image = overlay_transparent(image, resized_ball, center_x, center_y)
-            
+            # Calculate barrier positions
             top_barrier_factor, bottom_barrier_factor = level_barrier_settings[current_level]
             top_barrier_y = int(actual_height * top_barrier_factor)
             bottom_barrier_y = int(actual_height * bottom_barrier_factor)
             barrier_color = (67, 67, 84) 
             barrier_thickness = 3
+            
+            # Collision detection with cooldown
+            if collision_cooldown <= 0:
+                if check_collision_with_barriers(center_x, center_y, resized_ball.shape[1], 
+                                                resized_ball.shape[0], top_barrier_y, bottom_barrier_y, barrier_thickness):
+                    current_score -= barrier_penalty
+                    collision_cooldown = 30  # 30 frames cooldown
+                    print(f"Collision! Score reduced to: {current_score}")
+                    
+                    # Check game over
+                    if current_score <= 0:
+                        game_over = True
+                        print("Game Over! Score reached zero.")
+            else:
+                collision_cooldown -= 1
+            
+            image = overlay_transparent(image, resized_ball, center_x, center_y)
             
             cv2.line(image, (0, top_barrier_y), (actual_width, top_barrier_y), 
                      barrier_color, barrier_thickness)
@@ -274,6 +318,23 @@ def main():
             key = cv2.waitKey(5) & 0xFF 
             if key == 27 or cv2.getWindowProperty('MediaPipe Face Detection', cv2.WND_PROP_VISIBLE) < 1:
                 break
+        
+        # Game over screen
+        if game_over:
+            print(f"Final Score: {current_score}")
+            # Show game over message
+            game_over_img = np.zeros((actual_height, actual_width, 3), dtype=np.uint8)
+            cv2.putText(game_over_img, "GAME OVER", 
+                       (actual_width//2 - 120, actual_height//2 - 50), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 3)
+            cv2.putText(game_over_img, f"Final Score: {current_score}", 
+                       (actual_width//2 - 100, actual_height//2 + 20), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            cv2.putText(game_over_img, "Press any key to exit", 
+                       (actual_width//2 - 120, actual_height//2 + 60), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+            cv2.imshow('MediaPipe Face Detection', game_over_img)
+            cv2.waitKey(0)
                 
     cap.release()
     cv2.destroyAllWindows()
