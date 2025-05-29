@@ -29,45 +29,85 @@ mp_face_detection = mp.solutions.face_detection
 mp_drawing = mp.solutions.drawing_utils
 
 def overlay_transparent(background, overlay, x, y):
+    x = int(x)
+    y = int(y)
+    
     bh, bw = background.shape[:2]
-    h, w = overlay.shape[:2]
+    h_overlay, w_overlay = overlay.shape[:2]
+    
+    overlay_crop_x_start = 0
+    overlay_crop_y_start = 0
+    w_eff = w_overlay
+    h_eff = h_overlay
 
-    if x + w > bw: w = bw - x
-    if y + h > bh: h = bh - y
     if x < 0: 
-        overlay = overlay[:, -x:] # Crop overlay from left
-        w += x # Adjust width
+        overlay_crop_x_start = -x # Crop overlay from left
+        w_eff += x # Adjust width
         x = 0
     if y < 0: 
-        overlay = overlay[-y:, :] # Crop overlay from top
-        h += y # Adjust height
+        overlay_crop_y_start = -y # Crop overlay from top
+        h_eff += y # Adjust height
         y = 0
 
-    if w <= 0 or h <= 0 or overlay is None:
+    if w_eff <= 0 or h_eff <= 0:
+        return background
+    
+    # Penyesuaian jika overlay melewati batas kanan/bawah background
+    if x + w_eff > bw:
+        w_eff = bw - x
+    if y + h_eff > bh:
+        h_eff = bh - y
+        
+    if w_eff <= 0 or h_eff <= 0:
         return background
 
-    overlay_crop = overlay[:h, :w]
+    # overlay_crop = overlay[:h, :w]
     
-    if overlay_crop.shape[2] < 4:
-        print("Warning: Overlay image is not RGBA. Skipping overlay.")
+    overlay_to_blend = overlay [
+        int(overlay_crop_y_start) : int(overlay_crop_y_start + h_eff),
+        int(overlay_crop_x_start) : int(overlay_crop_x_start + w_eff)
+    ]
+    
+    if overlay_to_blend.size == 0 or overlay_to_blend.shape[2] < 4:
+        print(f"Warning: Overlay crop is empty or not RGBA. Shape: {overlay_to_blend.shape}")
         return background
-
-    bg_region = background[y:y+h, x:x+w]
     
-    if bg_region.shape[0] != overlay_crop.shape[0] or bg_region.shape[1] != overlay_crop.shape[1]:
-        return background
-
-    alpha_overlay = overlay_crop[:, :, 3:] / 255.0
-    color_overlay = overlay_crop[:, :, :3]
+    bg_y_start = int(y)
+    bg_y_end = int(y + h_eff)
+    bg_x_start = int(x)
+    bg_x_end = int(x + w_eff)
     
-    blended_color = color_overlay * alpha_overlay + bg_region[:,:,:3] * (1.0 - alpha_overlay)
+    # Ambil region dari background
+    bg_region = background[bg_y_start:bg_y_end, bg_x_start:bg_x_end]
     
-    background[y:y+h, x:x+w, :3] = blended_color.astype(np.uint8)
+    # Sanity check, seharusnya dimensi bg_region dan overlay_to_blend sama
+    if bg_region.shape[0] != overlay_to_blend.shape[0] or bg_region.shape[1] != overlay_to_blend.shape[1]:
+        # print(f"Shape mismatch after all calcs: bg_region {bg_region.shape}, overlay_to_blend {overlay_to_blend.shape}")
+        # Jika ada perbedaan kecil karena presisi float, coba resize overlay agar pas
+        if bg_region.shape[0] > 0 and bg_region.shape[1] > 0:
+            overlay_to_blend = cv2.resize(overlay_to_blend, (bg_region.shape[1], bg_region.shape[0]))
+        else:
+            return background # Tidak bisa melakukan blending
 
-    if background.shape[2] == 4: # If background itself has an alpha channel
-        alpha_bg_region = bg_region[:, :, 3:] / 255.0
-        new_alpha_bg = alpha_overlay + alpha_bg_region * (1.0 - alpha_overlay)
-        background[y:y+h, x:x+w, 3] = (new_alpha_bg * 255).astype(np.uint8)
+    # Blending
+    alpha_overlay = overlay_to_blend[:, :, 3:] / 255.0
+    color_overlay_pixels = overlay_to_blend[:, :, :3]
+    
+    # Pastikan bg_region memiliki 3 channel untuk blending warna
+    bg_region_color = bg_region
+    if bg_region.shape[2] == 4: # Jika background punya alpha, ambil RGB-nya saja
+        bg_region_color = bg_region[:, :, :3]
+
+    blended_color = color_overlay_pixels * alpha_overlay + bg_region_color * (1.0 - alpha_overlay)
+    
+    # Timpa region di background dengan hasil blending
+    background[bg_y_start:bg_y_end, bg_x_start:bg_x_end, :3] = blended_color.astype(np.uint8)
+
+    # Jika background punya alpha channel, update juga alpha channel-nya
+    if background.shape[2] == 4:
+        alpha_bg = bg_region[:, :, 3:] / 255.0 if bg_region.shape[2] == 4 else np.zeros_like(alpha_overlay)
+        new_alpha_bg = alpha_overlay + alpha_bg * (1.0 - alpha_overlay)
+        background[bg_y_start:bg_y_end, bg_x_start:bg_x_end, 3] = (new_alpha_bg * 255).astype(np.uint8)
 
     return background
 
@@ -462,7 +502,15 @@ def draw_ball_trail(img):
         thickness = int(3 * alpha)
         if thickness > 0:
             color = tuple(int(c * alpha) for c in color_schemes["accent"])
-            cv2.line(img, ball_trail[i-1], ball_trail[i], color, thickness)
+            # cv2.line(img, ball_trail[i-1], ball_trail[i], color, thickness)
+            
+            pt1 = ball_trail[i-1]
+            pt2 = ball_trail[i]
+            
+            start_point = (int(pt1[0]), int(pt1[1]))
+            end_point = (int(pt2[0]), int(pt2[1]))
+            
+            cv2.line(img, start_point, end_point, color, thickness)
 
 def draw_glassmorphism_panel(img, pt1, pt2, blur_strength=15, alpha=0.3):
     """Create glassmorphism effect panel"""
@@ -1010,8 +1058,8 @@ def main():
             current_sound_direction_val = sound_direction 
             
             # --- MODIFIKASI KECEPATAN BOLA ---
-            ball_speed_vertical = 6.5
-            ball_speed_horizontal = 4
+            ball_speed_vertical = 6
+            ball_speed_horizontal = 3
 
             if current_sound_direction_val != "neutral":
                 center_x += ball_speed_horizontal
