@@ -364,7 +364,7 @@ def draw_modern_barriers(img, width, height, top_y, bottom_y, thickness):
     cv2.line(img, (0, bottom_y), (width, bottom_y), barrier_color, thickness)
 
 def draw_modern_game_over(width, height, final_score, max_score_achieved):
-    """Create a modern game over screen"""
+    # game over
     game_over_img = np.zeros((height, width, 3), dtype=np.uint8)
     
     # Background gradient
@@ -386,14 +386,6 @@ def draw_modern_game_over(width, height, final_score, max_score_achieved):
     text_y = panel_y + 80
     
     # Glow effect for title
-    for i in range(3):
-        glow_size = 2.2 + i * 0.2
-        glow_alpha = 0.3 - i * 0.1
-        overlay = game_over_img.copy()
-        cv2.putText(overlay, "GAME OVER", (text_center_x - i*2, text_y + i*2), 
-                   cv2.FONT_HERSHEY_SIMPLEX, glow_size, (100, 100, 255), 4)
-        cv2.addWeighted(game_over_img, 1-glow_alpha, overlay, glow_alpha, 0, game_over_img)
-    
     cv2.putText(game_over_img, "GAME OVER", (text_center_x, text_y), 
                cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
     
@@ -883,7 +875,7 @@ def draw_start_screen(width, height):
 def main():
     global current_level, current_score, game_over, collision_flash, level_up_flash, game_started
 
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
     
     # Wider resolution to better accommodate webcam feed and info panel
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Increased from 1024
@@ -905,7 +897,9 @@ def main():
     desired_game_view_width = int(desired_game_view_height * webcam_aspect_ratio)
     
     # Total window width needs to accommodate both game view and info panel
-    window_width = desired_game_view_width + 250  # 250 is info panel width
+    # MODIFIED: Adjusted info panel width for window_width calculation
+    info_panel_width_for_calc = 80
+    window_width = desired_game_view_width + info_panel_width_for_calc
     window_height = actual_height
     
     print(f"Window dimensions: {window_width}x{window_height}")
@@ -930,9 +924,9 @@ def main():
 
     threading.Thread(target=sound_thread, daemon=True).start()
 
-    # Initialize frame_count before using it
     frame_count = 0
-    collision_cooldown = 0
+    # MODIFIED: collision_cooldown is not strictly necessary if game ends on first hit, but kept for flash
+    collision_cooldown = 0 
     
     # Show start screen
     while not game_started:
@@ -958,7 +952,7 @@ def main():
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             
             results = None
-            if frame_count % 1 == 0:
+            if frame_count % 1 == 0: # Process every frame for face detection
                 results = face_detection.process(image_rgb)
             frame_count += 1
             
@@ -969,7 +963,6 @@ def main():
             
             max_score_achieved = max(max_score_achieved, current_score)
 
-            # Face detection for glasses overlay
             if results and results.detections:
                 for detection in results.detections:
                     if kacamata is not None and kacamata.shape[1] > 0:
@@ -986,37 +979,40 @@ def main():
                         eye_center_y = (left_eye_y + right_eye_y) // 2
                         eye_width = int(2.5 * abs(right_eye_x - left_eye_x))
 
-                        if eye_width > 0:  # Ensure valid eye width
+                        if eye_width > 0: 
                             scale_factor = eye_width / kacamata.shape[1]
-                            new_glasses = cv2.resize(kacamata, (0, 0), fx=scale_factor, fy=scale_factor)
-
-                            gh, gw = new_glasses.shape[:2]
-                            top_left_x = eye_center_x - gw // 2
-                            top_left_y = eye_center_y - gh // 2
-                            image = overlay_transparent(image, new_glasses, top_left_x, top_left_y)
+                            # MODIFIED: Ensure new_glasses has positive dimensions before overlay
+                            if scale_factor > 0:
+                                new_glasses_width = int(kacamata.shape[1] * scale_factor)
+                                new_glasses_height = int(kacamata.shape[0] * scale_factor)
+                                if new_glasses_width > 0 and new_glasses_height > 0:
+                                    new_glasses = cv2.resize(kacamata, (new_glasses_width, new_glasses_height))
+                                    gh, gw = new_glasses.shape[:2]
+                                    top_left_x = eye_center_x - gw // 2
+                                    top_left_y = eye_center_y - gh // 2
+                                    image = overlay_transparent(image, new_glasses, top_left_x, top_left_y)
             
-            # Create a frame buffer with the correct window dimensions
             frame_buffer = np.zeros((window_height, window_width, 3), dtype=np.uint8)
             
-            # If image dimensions don't match window dimensions, resize or pad
             if image.shape[0] != window_height or image.shape[1] != window_width:
-                # Resize image to fit the desired game view area while preserving aspect ratio
                 display_img = cv2.resize(image, (desired_game_view_width, desired_game_view_height))
-                
-                # Copy the resized image into the frame buffer
-                frame_buffer[:display_img.shape[0], :display_img.shape[1]] = display_img
+                # Ensure display_img is copied correctly if its width is less than frame_buffer's width
+                if display_img.shape[1] <= frame_buffer.shape[1] and display_img.shape[0] <= frame_buffer.shape[0]:
+                     frame_buffer[:display_img.shape[0], :display_img.shape[1]] = display_img
+                else: # Fallback if something is wrong with resize calculation
+                    frame_buffer = cv2.resize(image, (window_width, window_height))
+
             else:
                 frame_buffer = image.copy()
             
-            # Draw split interface (this will preserve webcam background in game area)
             game_view_width = draw_split_interface(frame_buffer, window_width, window_height, fps, current_score, 
-                                                current_level, sound_info, sound_direction, collision_flash, level_up_flash)
+                                                   current_level, sound_info, sound_direction, collision_flash, level_up_flash)
             
-            # Ball movement logic (only in game view area)
             current_sound_direction_val = sound_direction 
             
-            ball_speed_vertical = 4
-            ball_speed_horizontal = 2 
+            # --- MODIFIKASI KECEPATAN BOLA ---
+            ball_speed_vertical = 6  # Sebelumnya 4, dinaikkan menjadi 6 (atau sesuai keinginanmu)
+            ball_speed_horizontal = 3 # Sebelumnya 2, dinaikkan menjadi 3 (atau sesuai keinginanmu)
 
             if current_sound_direction_val != "neutral":
                 center_x += ball_speed_horizontal
@@ -1027,10 +1023,8 @@ def main():
             
             center_y = max(0, min(center_y, actual_height - resized_ball.shape[0]))
             
-            # Add ball trail
             add_ball_trail(center_x + resized_ball.shape[1]//2, center_y + resized_ball.shape[0]//2)
             
-            # Level up logic (use game view width instead of full width)
             if center_x + resized_ball.shape[1] >= game_view_width:
                 if current_level < max_level:
                     current_level += 1
@@ -1044,49 +1038,43 @@ def main():
 
             center_x = max(0, min(center_x, game_view_width - resized_ball.shape[1])) 
             
-            # Calculate barrier positions
             top_barrier_factor, bottom_barrier_factor = level_barrier_settings[current_level]
             top_barrier_y = int(actual_height * top_barrier_factor)
             bottom_barrier_y = int(actual_height * bottom_barrier_factor)
             barrier_thickness = 3
             
-            # Collision detection
+            # --- MODIFIKASI LOGIKA GAME OVER ---
             if collision_cooldown <= 0:
                 if check_collision_with_barriers(center_x, center_y, resized_ball.shape[1], 
-                                                resized_ball.shape[0], top_barrier_y, bottom_barrier_y, barrier_thickness):
-                    current_score -= barrier_penalty
-                    collision_cooldown = 30
-                    collision_flash = 30
-                    print(f"Collision! Score reduced to: {current_score}")
-                    
-                    if current_score <= 0:
-                        game_over = True
-                        print("Game Over! Score reached zero.")
+                                                 resized_ball.shape[0], top_barrier_y, bottom_barrier_y, barrier_thickness):
+                    print(f"Collision! Game Over. Final Score: {current_score}")
+                    collision_flash = 30 # Untuk efek visual sesaat sebelum game over
+                    game_over = True # Langsung game over
+                    # current_score -= barrier_penalty # Penalti skor tidak lagi relevan jika langsung game over
+                    # if current_score <= 0: # Cek skor <= 0 tidak lagi relevan
+                    # game_over = True
             else:
                 collision_cooldown -= 1
             
-            # Update animation counters
             if collision_flash > 0:
                 collision_flash -= 1
             if level_up_flash > 0:
                 level_up_flash -= 1
             
-            # Update and draw particles
             update_particles()
             
-            # Draw ball trail (only in game view)
             draw_ball_trail(frame_buffer)
             
-            # Draw ball
+            # Pastikan frame_buffer dan resized_ball adalah RGBA jika overlay_transparent mengharapkannya
+            # Jika frame_buffer adalah BGR (umumnya dari webcam), dan resized_ball adalah RGBA,
+            # overlay_transparent harus menangani ini.
+            # Dari kode overlay_transparent, ia menangani background BGR dan overlay RGBA.
             frame_buffer = overlay_transparent(frame_buffer, resized_ball, center_x, center_y)
             
-            # Draw barriers (only in game view)
             draw_modern_barriers(frame_buffer, game_view_width, window_height, top_barrier_y, bottom_barrier_y, barrier_thickness)
             
-            # Draw particles
             draw_particles(frame_buffer)
             
-            # Draw game view overlay
             draw_game_view_overlay(frame_buffer, game_view_width, window_height, current_level)
             
             cv2.imshow('Suaraku Terbang', frame_buffer)
@@ -1095,12 +1083,11 @@ def main():
             if key == 27 or cv2.getWindowProperty('Suaraku Terbang', cv2.WND_PROP_VISIBLE) < 1:
                 break
         
-        # Game over screen
-        if game_over:
-            print(f"Final Score: {current_score}")
+        if game_over: # Hanya tampilkan layar game over jika game_over adalah True
+            print(f"Final Score on Game Over Screen: {current_score}") # Skor yang ditampilkan adalah skor saat game over
             game_over_img = draw_modern_game_over(actual_width, actual_height, current_score, max_score_achieved)
             cv2.imshow('Suaraku Terbang', game_over_img)
-            cv2.waitKey(0)
+            cv2.waitKey(0) # Tunggu input sebelum menutup
                 
     cap.release()
     cv2.destroyAllWindows()
