@@ -123,7 +123,7 @@ Siapkah Anda menguji kemampuan vokal dan refleks Anda dalam "Suaraku Terbang"?
 
       Jika ingin lebih memastikan nilai channel dan sampling rate dari mic yang anda gunakan, anda dapat melihatnya melalui settings bawaan windows.
 
-      ![Settings/System/Sound/Properties](for_readme/format%20mic%20device.png){width=250}
+      ![Settings/System/Sound/Properties](for_readme/format%20mic%20device.png)
 
 3.  **Gameplay:**
     - Gunakan suara Anda untuk mengontrol gerakan bola. Suara bernada tinggi (treble) akan menggerakkan bola ke atas, dan suara bernada rendah (bass) akan menggerakkan bola ke bawah.
