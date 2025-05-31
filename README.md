@@ -45,6 +45,10 @@ Siapkah Anda menguji kemampuan vokal dan refleks Anda dalam "Suaraku Terbang"?
 | _30 Mei 2025_ | - Fix kecepatan bola.<br>- Fix logika skor dan modularisasi kode.                                                                    | Eden, Lathief           |
 | _31 Mei 2025_ | Update README.md                                                                                                                     | Lathief                 |
 
+## Demonstrasi Program
+
+[Demonstrasi Suaraku Terbang](https://youtu.be/gLfBfn93XxQ?si=p_Sxa1XPKhcVgiYn)
+
 ## Instruksi Instalasi
 
 1.  **Clone repository ini:**
