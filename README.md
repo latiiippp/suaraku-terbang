@@ -43,7 +43,7 @@ Siapkah Anda menguji kemampuan vokal dan refleks Anda dalam "Suaraku Terbang"?
 | _26 Mei 2025_ | - Logika pergerakan bola ke kanan.<br>- Logika leveling.                                                                             | Lathief                 |
 | _29 Mei 2025_ | - Improve GUI dan scoring system.<br>- Layar game over.                                                                              | Afencius, Eden          |
 | _30 Mei 2025_ | - Fix kecepatan bola.<br>- Fix logika skor dan modularisasi kode.                                                                    | Eden, Lathief           |
-| _31 Mei 2025_ | Update README.md                                                                                                                     |                         |
+| _31 Mei 2025_ | Update README.md                                                                                                                     | Lathief                 |
 
 ## Instruksi Instalasi
 
