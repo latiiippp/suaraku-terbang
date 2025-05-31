@@ -17,7 +17,7 @@ def detect_sound_direction(duration=0.1, sample_rate=44100):
     """
     try:
         # Merekam audio dari perangkat input default (atau device=31 jika spesifik)
-        recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='float32', device=31) # Sesuaikan device jika perlu
+        recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='float32', device=1) # Sesuaikan device jika perlu
         sd.wait()  # Tunggu hingga rekaman selesai
         audio_data = recording.flatten() # Ubah array 2D menjadi 1D
 
